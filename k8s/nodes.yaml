@@ -1,8 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: node-backend
 spec:
+  serviceName: "node-service"
   replicas: 3
   selector:
     matchLabels:
@@ -15,7 +16,7 @@ spec:
       containers:
       - name: node
         image: loadbalancer-node:latest
-        imagePullPolicy: Never # Assumes local image for minikube/kind
+        imagePullPolicy: Never
         ports:
         - containerPort: 3000
         env:
@@ -29,8 +30,8 @@ metadata:
 spec:
   selector:
     app: node-backend
+  clusterIP: None # Headless service for stable DNS entries
   ports:
     - protocol: TCP
       port: 3000
       targetPort: 3000
-  type: ClusterIP

@@ -1,0 +1,10 @@
+{
+  "name": "loadbalancer-node",
+  "version": "1.0.0",
+  "description": "Simple node for load balancer demo",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {}
+}

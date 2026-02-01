@@ -4,7 +4,10 @@
   "description": "Simple node for load balancer demo",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "concurrently \"node app.js\" \"node fix-server.js\"",
+    "fix": "node fix-server.js"
   },
-  "dependencies": {}
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
 }

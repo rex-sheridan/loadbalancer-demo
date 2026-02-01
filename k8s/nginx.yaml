@@ -4,8 +4,29 @@ metadata:
   name: nginx-config
 data:
   nginx.conf: |
+    load_module modules/ngx_stream_js_module.so;
+
     events {
         worker_connections 1024;
+    }
+
+    stream {
+        js_import fix_parser.js;
+        js_set $backend_node fix_parser.getBackend;
+
+        upstream shard_A { server node-backend-0.node-service:9876; }
+        upstream shard_B { server node-backend-1.node-service:9876; }
+        upstream fix_nodes {
+            server node-backend-0.node-service:9876;
+            server node-backend-1.node-service:9876;
+            server node-backend-2.node-service:9876;
+        }
+
+        server {
+            listen 9876;
+            js_preread fix_parser.parseLogon;
+            proxy_pass $backend_node;
+        }
     }
 
     http {
@@ -34,6 +55,32 @@ data:
             }
         }
     }
+  fix_parser.js: |
+    var backend = "fix_nodes";
+    function parseLogon(s) {
+        s.on('upload', function (data, flags) {
+            if (data.length > 0) {
+                var str = data.toString();
+                var match = str.match(/49=([^\x01]+)/);
+                if (match) {
+                    var sender = match[1];
+                    s.log("Found SenderCompID: " + sender);
+                    if (sender === "CLIENT_A") {
+                        backend = "shard_A";
+                    } else if (sender === "CLIENT_B") {
+                        backend = "shard_B";
+                    } else {
+                        backend = "fix_nodes";
+                    }
+                }
+                s.done();
+            }
+        });
+    }
+    function getBackend(s) {
+        return backend;
+    }
+    export default { parseLogon, getBackend };
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -54,10 +101,14 @@ spec:
         image: nginx:latest
         ports:
         - containerPort: 80
+        - containerPort: 9876
         volumeMounts:
         - name: nginx-config-volume
           mountPath: /etc/nginx/nginx.conf
           subPath: nginx.conf
+        - name: nginx-config-volume
+          mountPath: /etc/nginx/fix_parser.js
+          subPath: fix_parser.js
       volumes:
       - name: nginx-config-volume
         configMap:
@@ -71,7 +122,12 @@ spec:
   selector:
     app: nginx-lb
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 80
       targetPort: 80
-  type: LoadBalancer # NodePort can be used if LoadBalancer is not available
+    - name: fix
+      protocol: TCP
+      port: 9876
+      targetPort: 9876
+  type: LoadBalancer

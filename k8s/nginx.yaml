@@ -10,6 +10,7 @@ data:
 
     http {
         upstream nodes {
+            ip_hash;
             server node-service:3000;
         }
 

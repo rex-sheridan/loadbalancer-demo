@@ -11,11 +11,18 @@ data:
     }
 
     stream {
+        resolver kube-dns.kube-system.svc.cluster.local valid=5s;
         js_import fix_parser.js;
         js_set $backend_node fix_parser.getBackend;
 
-        upstream shard_A { server node-backend-0.node-service:9876; }
-        upstream shard_B { server node-backend-1.node-service:9876; }
+        upstream shard_A {
+            server node-backend-0.node-service:9876;
+            server node-backend-1.node-service:9876 backup;
+        }
+        upstream shard_B {
+            server node-backend-1.node-service:9876;
+            server node-backend-2.node-service:9876 backup;
+        }
         upstream fix_nodes {
             server node-backend-0.node-service:9876;
             server node-backend-1.node-service:9876;
@@ -30,7 +37,7 @@ data:
     }
 
     http {
-        resolver kube-dns.kube-system.svc.cluster.local;
+        resolver kube-dns.kube-system.svc.cluster.local valid=5s;
         map $http_x_shard_id $backend_node {
             "0" "node-backend-0.node-service:3000";
             "1" "node-backend-1.node-service:3000";
@@ -56,21 +63,21 @@ data:
         }
     }
   fix_parser.js: |
-    var backend = "fix_nodes";
     function parseLogon(s) {
         s.on('upload', function (data, flags) {
             if (data.length > 0) {
                 var str = data.toString();
                 var match = str.match(/49=([^\x01]+)/);
+                s.ctx = s.ctx || {};
                 if (match) {
                     var sender = match[1];
                     s.log("Found SenderCompID: " + sender);
                     if (sender === "CLIENT_A") {
-                        backend = "shard_A";
+                        s.ctx.backend = "shard_A";
                     } else if (sender === "CLIENT_B") {
-                        backend = "shard_B";
+                        s.ctx.backend = "shard_B";
                     } else {
-                        backend = "fix_nodes";
+                        s.ctx.backend = "fix_nodes";
                     }
                 }
                 s.done();
@@ -78,7 +85,7 @@ data:
         });
     }
     function getBackend(s) {
-        return backend;
+        return (s.ctx && s.ctx.backend) ? s.ctx.backend : "fix_nodes";
     }
     export default { parseLogon, getBackend };
 ---

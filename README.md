@@ -51,6 +51,29 @@ echo -e "8=FIX.4.2\x019=12\x0135=A\x0149=CLIENT_B\x0156=SERVER\x01" | nc localho
 ```
 Check the node logs to verify: `docker-compose logs node1 node2`
 
+#### D. High Availability / Failover (FIX)
+Each FIX shard has a primary and a backup node:
+- **Shard A**: `node1` (Primary), `node2` (Backup)
+- **Shard B**: `node2` (Primary), `node3` (Backup)
+
+**Testing Failover:**
+1. Send a request for `CLIENT_A`:
+   ```bash
+   echo -e "8...49=CLIENT_A..." | nc localhost 9876 # Hits Node 1
+   ```
+2. Stop Node 1:
+   ```bash
+   docker-compose stop node1
+   ```
+3. Send the request again:
+   ```bash
+   echo -e "8...49=CLIENT_A..." | nc localhost 9876 # Hits Node 2 (Backup)
+   ```
+4. Restart Node 1 to test failback:
+   ```bash
+   docker-compose start node1
+   ```
+
 ### 4. Stop the Environment
 To stop and remove the containers:
 ```bash
@@ -87,6 +110,9 @@ Deploy the nodes and the load balancer:
 kubectl apply -f k8s/
 ```
 
+> [!IMPORTANT]
+> If you get an error like `spec.clusterIPs[0]: Invalid value: ["None"]: may not change once set`, it's because the service is being converted to a Headless Service. Delete it first: `kubectl delete service node-service` then re-apply.
+
 ### 3. Verify
 
 #### A. HTTP Load Balancing
@@ -100,10 +126,16 @@ curl http://localhost:8888
 kubectl port-forward service/nginx-service 9876:9876
 echo -e "8=FIX.4.2\x019=12\x0135=A\x0149=CLIENT_A\x0156=SERVER\x01" | nc localhost 9876
 ```
-Watch the logs of the specific node pod:
+
+#### C. Automated Failover Test
+A script is provided to automate the primary/backup failover check:
 ```bash
-kubectl logs node-backend-0
+./verify-k8s-failover.sh
 ```
+This script will:
+1. Send a Logon for `CLIENT_A` (hits `node-backend-0`).
+2. Delete pod `node-backend-0`.
+3. Send a Logon again (hits `node-backend-1` as backup).
 
 ### 4. Cleanup
 ```bash

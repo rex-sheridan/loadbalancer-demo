@@ -7,7 +7,7 @@
     "start": "concurrently \"node app.js\" \"node fix-server.js\"",
     "fix": "node fix-server.js"
   },
-  "devDependencies": {
+  "dependencies": {
     "concurrently": "^8.2.2"
   }
 }
